@@ -8,7 +8,7 @@ from app.models.user import User
 
 # How many generations per month per tier
 TIER_LIMITS = {
-    "free":   3,
+    "free":   2,       # 2 projects/month
     "pro":    20,
     "expert": 999999,  # unlimited
     "school": 999999,
