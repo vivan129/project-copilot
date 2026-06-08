@@ -1,6 +1,8 @@
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+import traceback
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from app.config import settings
 from app.api.v1 import auth, projects, generate, components, subscriptions
 from app.db.session import engine, Base
@@ -23,6 +25,15 @@ app = FastAPI(
     version="0.1.0",
     docs_url="/docs",  # temp: always enabled for debugging
 )
+
+# ─── Global error handler (temp: surface real errors) ───────────────────────
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception):
+    return JSONResponse(
+        status_code=500,
+        content={"error": type(exc).__name__, "detail": str(exc), "trace": traceback.format_exc()[-2000:]},
+    )
+
 
 # ─── CORS ───────────────────────────────────────────────────────────────────
 app.add_middleware(
