@@ -495,4 +495,73 @@ Generate the complete blueprint JSON now:"""
         return bp
 
 
+    async def suggest_parts(self, input_data: dict) -> list[dict]:
+        """
+        Fast call — returns a list of recommended parts for the project
+        before the full blueprint is generated. Student then checks which
+        they already own; all parts are used in the final blueprint.
+        """
+        client = self._get_client()
+        category    = input_data.get("category", "electronics")
+        goal        = input_data.get("goal", "Build something cool")
+        budget      = input_data.get("budget", 500)
+        currency    = input_data.get("currency", "INR")
+        skill_level = input_data.get("skill_level", "beginner")
+        time_avail  = input_data.get("time_available", "1 week")
+
+        prompt = f"""You are an expert electronics teacher recommending parts for a student project.
+
+Student wants to build: {goal}
+Category: {category}
+Skill level: {skill_level}
+Budget: {currency} {budget}
+Time: {time_avail}
+
+Return ONLY a JSON array of recommended parts — no other text.
+Each part: {{"name": "...", "quantity": 1, "price_estimate": "₹XXX / $X", "why_needed": "one sentence", "essential": true/false}}
+
+Rules:
+- List 4-8 parts maximum
+- Stay within budget
+- Use beginner-appropriate parts for beginners
+- Mark 1-2 parts as essential:false (nice-to-have)
+- Include realistic Indian prices if INR
+
+Return ONLY the JSON array, nothing else."""
+
+        try:
+            message = await client.messages.create(
+                model=settings.ANTHROPIC_MODEL,
+                max_tokens=1500,
+                system="You are a parts recommendation engine. Return ONLY valid JSON arrays, no prose.",
+                messages=[{"role": "user", "content": prompt}],
+            )
+            raw = "".join(block.text for block in message.content if block.type == "text")
+            # Extract JSON array
+            raw = raw.strip()
+            start = raw.find("[")
+            end   = raw.rfind("]") + 1
+            if start == -1 or end == 0:
+                raise ValueError("No JSON array in response")
+            return json.loads(raw[start:end])
+        except Exception as e:
+            logger.error("suggest_parts failed: %s", e)
+            # Fallback: return generic starter kit based on category
+            defaults = {
+                "robotics":     [{"name": "Arduino Uno", "quantity": 1, "price_estimate": "₹500 / $6", "why_needed": "Main microcontroller", "essential": True},
+                                 {"name": "L298N Motor Driver", "quantity": 1, "price_estimate": "₹150 / $2", "why_needed": "Controls DC motors", "essential": True},
+                                 {"name": "DC Motor (TT Gear)", "quantity": 2, "price_estimate": "₹80 / $1", "why_needed": "Drives the robot wheels", "essential": True},
+                                 {"name": "HC-SR04 Ultrasonic Sensor", "quantity": 1, "price_estimate": "₹80 / $1", "why_needed": "Obstacle detection", "essential": False}],
+                "arduino":      [{"name": "Arduino Uno", "quantity": 1, "price_estimate": "₹500 / $6", "why_needed": "Main microcontroller", "essential": True},
+                                 {"name": "Breadboard", "quantity": 1, "price_estimate": "₹60 / $1", "why_needed": "Prototyping without soldering", "essential": True},
+                                 {"name": "LED + Resistors Kit", "quantity": 1, "price_estimate": "₹50 / $1", "why_needed": "Visual indicators", "essential": True},
+                                 {"name": "Jumper Wires", "quantity": 1, "price_estimate": "₹40 / $0.5", "why_needed": "Circuit connections", "essential": True}],
+                "iot":          [{"name": "ESP32", "quantity": 1, "price_estimate": "₹400 / $5", "why_needed": "WiFi-enabled microcontroller", "essential": True},
+                                 {"name": "DHT22 Sensor", "quantity": 1, "price_estimate": "₹150 / $2", "why_needed": "Temperature and humidity", "essential": True},
+                                 {"name": "OLED Display (0.96\")", "quantity": 1, "price_estimate": "₹180 / $2", "why_needed": "Shows sensor readings", "essential": False},
+                                 {"name": "Breadboard + Jumpers", "quantity": 1, "price_estimate": "₹100 / $1.5", "why_needed": "Prototyping", "essential": True}],
+            }
+            return defaults.get(category, defaults["arduino"])
+
+
 ai_service = AIService()

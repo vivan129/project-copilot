@@ -31,7 +31,8 @@ logger = logging.getLogger(__name__)
 # ── Schemas ───────────────────────────────────────────────────────────────────
 class GenerateRequest(BaseModel):
     category: str = Field(..., description="Project category")
-    components: list[str] = Field(default_factory=list)
+    components: list[str] = Field(default_factory=list)       # all parts (AI-suggested)
+    owned_components: list[str] = Field(default_factory=list)  # subset student already owns
     budget: float = Field(500, ge=0)
     currency: str = Field("INR")
     skill_level: str = Field("beginner")
@@ -282,6 +283,26 @@ async def generation_websocket(
             await websocket.close()
         except Exception:
             pass
+
+
+# ── Suggest parts — fast pre-generation call ─────────────────────────────────
+
+@router.post("/suggest-parts")
+async def suggest_parts(
+    req: GenerateRequest,
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Fast call that returns a recommended parts list for the goal.
+    Frontend shows these to the student who marks which they already own.
+    The full generate call then uses the complete list.
+    """
+    try:
+        from app.services.ai_service import ai_service
+        parts = await ai_service.suggest_parts(req.model_dump())
+        return {"parts": parts}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Parts suggestion failed: {e}")
 
 
 # ── Demo endpoint — no auth needed ───────────────────────────────────────────
