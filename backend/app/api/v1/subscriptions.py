@@ -28,11 +28,12 @@ router = APIRouter()
 
 stripe.api_key = settings.STRIPE_SECRET_KEY
 
-TIER_PRICE_MAP = {
-    settings.STRIPE_PRO_PRICE_ID:    "pro",
-    settings.STRIPE_EXPERT_PRICE_ID: "expert",
-    settings.STRIPE_SCHOOL_PRICE_ID: "school",
-}
+def _get_tier_price_map() -> dict:
+    return {
+        settings.STRIPE_PRO_PRICE_ID:    "pro",
+        settings.STRIPE_EXPERT_PRICE_ID: "expert",
+        settings.STRIPE_SCHOOL_PRICE_ID: "school",
+    }
 
 TIER_LIMITS = {"free": 2, "pro": 20, "expert": 999999, "school": 999999}
 
@@ -40,7 +41,7 @@ TIER_LIMITS = {"free": 2, "pro": 20, "expert": 999999, "school": 999999}
 # ── Schemas ───────────────────────────────────────────────────────────────────
 
 class CheckoutRequest(BaseModel):
-    price_id: str
+    plan: str        # "pro" | "expert" | "school"
     success_url: str = ""
     cancel_url: str  = ""
 
@@ -54,8 +55,14 @@ async def create_checkout(
     db: AsyncSession = Depends(get_db),
 ):
     """Create a Stripe Checkout session and return the URL."""
-    if req.price_id not in TIER_PRICE_MAP:
-        raise HTTPException(400, "Invalid price ID")
+    PLAN_PRICE_MAP = {
+        "pro":    settings.STRIPE_PRO_PRICE_ID,
+        "expert": settings.STRIPE_EXPERT_PRICE_ID,
+        "school": settings.STRIPE_SCHOOL_PRICE_ID,
+    }
+    price_id = PLAN_PRICE_MAP.get(req.plan)
+    if not price_id:
+        raise HTTPException(400, f"Invalid plan '{req.plan}'. Choose: pro, expert, school")
 
     frontend = settings.FRONTEND_URL.rstrip("/")
     success_url = req.success_url or f"{frontend}/dashboard?upgraded=1"
@@ -77,11 +84,11 @@ async def create_checkout(
         session = stripe.checkout.Session.create(
             customer=customer_id,
             payment_method_types=["card"],
-            line_items=[{"price": req.price_id, "quantity": 1}],
+            line_items=[{"price": price_id, "quantity": 1}],
             mode="subscription",
             success_url=success_url + "&session_id={CHECKOUT_SESSION_ID}",
             cancel_url=cancel_url,
-            metadata={"user_id": str(current_user.id), "price_id": req.price_id},
+            metadata={"user_id": str(current_user.id), "price_id": price_id},
             allow_promotion_codes=True,
         )
         return {"url": session.url, "session_id": session.id}
@@ -174,7 +181,7 @@ async def stripe_webhook(
     if event_type == "checkout.session.completed":
         user_id  = data.get("metadata", {}).get("user_id")
         price_id = data.get("metadata", {}).get("price_id")
-        new_tier = TIER_PRICE_MAP.get(price_id)
+        new_tier = _get_tier_price_map().get(price_id)
 
         if user_id and new_tier:
             result = await db.execute(select(User).where(User.id == user_id))
