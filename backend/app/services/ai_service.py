@@ -251,8 +251,7 @@ Generate the complete blueprint JSON now:"""
         try:
             async with client.messages.stream(
                 model=settings.ANTHROPIC_MODEL,
-                max_tokens=10000,
-                thinking={"type": "adaptive"},
+                max_tokens=16000,
                 system=SYSTEM_PROMPT,
                 messages=[
                     {"role": "user", "content": FEW_SHOT_EXAMPLE},
@@ -286,8 +285,7 @@ Generate the complete blueprint JSON now:"""
             try:
                 async with client.messages.stream(
                     model=settings.ANTHROPIC_MODEL,
-                    max_tokens=10000,
-                    thinking={"type": "adaptive"},
+                    max_tokens=16000,
                     system=SYSTEM_PROMPT,
                     messages=[{"role": "user", "content": user_prompt}],
                 ) as stream2:
@@ -334,8 +332,8 @@ Generate the complete blueprint JSON now:"""
         try:
             message = await client.messages.create(
                 model=settings.ANTHROPIC_MODEL,
-                max_tokens=10000,
-                thinking={"type": "adaptive"},
+                max_tokens=16000,
+                # No thinking — we need ALL tokens for the JSON output, not internal reasoning
                 system=SYSTEM_PROMPT,
                 messages=[
                     {"role": "user", "content": FEW_SHOT_EXAMPLE},
@@ -351,8 +349,7 @@ Generate the complete blueprint JSON now:"""
             await asyncio.sleep(15)
             message = await client.messages.create(
                 model=settings.ANTHROPIC_MODEL,
-                max_tokens=10000,
-                thinking={"type": "adaptive"},
+                max_tokens=16000,
                 system=SYSTEM_PROMPT,
                 messages=[{"role": "user", "content": user_prompt}],
             )
@@ -386,7 +383,15 @@ Generate the complete blueprint JSON now:"""
                     end = i + 1
                     break
         else:
-            raise ValueError("JSON object is not closed")
+            # JSON was truncated — try to close it by appending closing braces
+            logger.warning("JSON truncated — attempting auto-close repair (depth=%d)", depth)
+            truncated = text[start:]
+            repaired = truncated + "}" * depth
+            try:
+                blueprint = json.loads(repaired)
+                return self._enrich_blueprint(blueprint, {}) if not blueprint.get("title") else blueprint
+            except Exception:
+                raise ValueError("JSON object is not closed and could not be repaired")
 
         blueprint = json.loads(text[start:end])
 
