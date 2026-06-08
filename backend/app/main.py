@@ -21,7 +21,7 @@ app = FastAPI(
     title=settings.APP_NAME,
     description="AI copilot for physical engineering projects",
     version="0.1.0",
-    docs_url="/docs" if settings.APP_ENV == "development" else None,
+    docs_url="/docs",  # temp: always enabled for debugging
 )
 
 # ─── CORS ───────────────────────────────────────────────────────────────────
@@ -49,3 +49,20 @@ app.include_router(subscriptions.router, prefix="/api/v1/subscriptions", tags=["
 @app.get("/health")
 async def health():
     return {"status": "ok", "app": settings.APP_NAME}
+
+
+@app.get("/debug/db")
+async def debug_db():
+    """Temporary: check DB connection and table list."""
+    import traceback
+    from sqlalchemy import text
+    try:
+        async with engine.connect() as conn:
+            result = await conn.execute(text(
+                "SELECT table_name FROM information_schema.tables WHERE table_schema='public'"
+            ))
+            tables = [row[0] for row in result]
+        db_url_safe = str(engine.url).replace(str(engine.url.password or ""), "***")
+        return {"status": "ok", "tables": tables, "db_url": db_url_safe}
+    except Exception as e:
+        return {"status": "error", "error": str(e), "trace": traceback.format_exc()}
