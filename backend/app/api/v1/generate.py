@@ -148,10 +148,11 @@ async def quick_generate(
     except ValueError as ve:
         raise HTTPException(status_code=503, detail=str(ve))
     except Exception as e:
-        logger.error("Quick generation failed: %s", e)
+        import traceback
+        logger.error("Quick generation failed: %s\n%s", e, traceback.format_exc())
         project.status = "failed"
         await db.commit()
-        raise HTTPException(status_code=500, detail="Generation failed. Please try again.")
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
 
 
 @router.get("/status/{job_id}")
