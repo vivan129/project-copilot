@@ -1,9 +1,23 @@
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
 from app.api.v1 import auth, projects, generate, components, subscriptions
+from app.db.session import engine, Base
+import app.models.user    # noqa: F401 – register models with Base
+import app.models.project  # noqa: F401 – register models with Base
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Auto-create all tables on startup (idempotent)
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    yield
+
 
 app = FastAPI(
+    lifespan=lifespan,
     title=settings.APP_NAME,
     description="AI copilot for physical engineering projects",
     version="0.1.0",
