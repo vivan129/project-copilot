@@ -118,7 +118,13 @@ def _save_blueprint_sync(project_id: str, user_id: str, input_data: dict, bluepr
         from sqlalchemy import create_engine
         from sqlalchemy.orm import sessionmaker
 
-        sync_url = settings.DATABASE_URL.replace("+asyncpg", "+psycopg2")
+        raw_url = settings.DATABASE_URL
+        # Normalise: strip any existing driver spec, then add psycopg2
+        for prefix in ("postgresql+asyncpg://", "postgresql+psycopg2://", "postgresql://", "postgres://"):
+            if raw_url.startswith(prefix):
+                raw_url = "postgresql+psycopg2://" + raw_url[len(prefix):]
+                break
+        sync_url = raw_url
         engine = create_engine(sync_url, pool_pre_ping=True)
         Session = sessionmaker(bind=engine)
 
