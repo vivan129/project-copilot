@@ -76,7 +76,6 @@ async def start_generation(
         user_id=str(current_user.id),
         title=f"New {req.category.title()} Project",
         status="generating",
-        emoji="⚙️",
         category=req.category,
     )
     db.add(project)
@@ -125,7 +124,6 @@ async def quick_generate(
         user_id=str(current_user.id),
         title=f"New {req.category.title()} Project",
         status="generating",
-        emoji="⚙️",
         category=req.category,
     )
     db.add(project)
@@ -139,7 +137,6 @@ async def quick_generate(
         # Update project
         project.status = "complete"
         project.title = blueprint.get("title", project.title)
-        project.emoji = blueprint.get("emoji", "🤖")
         await db.commit()
 
         await log_usage(current_user, "generate", db)
